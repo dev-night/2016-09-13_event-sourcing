@@ -1,7 +1,41 @@
 <?php
 
-require __DIR__.'/Id.php';
-require __DIR__.'/ShoppingCartId.php';
+abstract class Id
+{
+    private $uuid;
+
+    protected function __construct($uuid)
+    {
+        $this->uuid = $uuid;
+    }
+    
+    public static function fromString($uuid)
+    {
+        return new static($uuid);
+    }
+    
+    public function getUuid()
+    {
+        return $this->uuid;
+    }
+    
+    public function __toString() {
+        return $this->uuid;
+    }
+}
+
+class ShoppingCartId extends Id
+{
+    public static function generate()
+    {
+        return new static(uniqid('shoppingcart'));
+    }
+}
+
+class ProductId extends Id { }
+
+
+
 
 class ShoppingCart
 {
@@ -66,8 +100,6 @@ class ProductRemovedFromShoppingCart
     }
 }
 
-
-
 class ShoppingCartWasCreated
 {
     private $shoppingCartId;
@@ -78,8 +110,6 @@ class ShoppingCartWasCreated
     }
 }
 
-
-class ProductId extends Id { }
 
 
 class ShoppingCartRepository
