@@ -1,0 +1,486 @@
+#+Title: Event Sourcing 101
+#+Author: Stefan Siegl
+#+Email: stefan.siegl@tradebyte.com
+#+Date: 2016-09-13
+
+#+OPTIONS: reveal_center:t reveal_progress:t reveal_history:t reveal_control:t
+#+OPTIONS: reveal_rolling_links:t reveal_keyboard:t reveal_overview:t num:nil
+#+OPTIONS: toc:0
+#+OPTIONS: reveal_slide_number:nil
+#+OPTIONS: reveal_title_slide:"<h1>%t</h1><h2>%a</h2><p>%e</p>"
+#+OPTIONS: reveal_width:1200 reveal_height:800
+#+OPTIONS: ^:nil
+#+REVEAL_MARGIN: 0.1
+#+REVEAL_MIN_SCALE: 0.5
+#+REVEAL_MAX_SCALE: 2.5
+#+REVEAL_THEME: white
+#+REVEAL_HLEVEL: 1
+#+REVEAL_PLUGINS: (markdown notes)
+#+REVEAL_EXTRA_CSS: custom.css
+
+*   
+
+[[./images/dev_night-logo.png]]
+
+* Disclaimer
+
+- CQS, CQRS & Event Sourcing sind kein "Silver Bullet"
+- die gezeigten Entwurfsmuster können die Architektur in Teilen verbessern
+- alles mit Event Sourcing bauen ist definitiv ein Anti Pattern
+- Design-Entscheidung für einzelne bounded contexts treffen
+
+* Business Domäne
+
+- einfaches Beispiel das jeder kennt: Warenkorb
+- Warenkorb wird angelegt (evtl. kennen wir den Kunden auch schon)
+- Kunde fügt Produkte dem Warenkorb hinzu
+- Kunde entfernt diese wieder
+
+* Active Record
+
+"Data Mapper", gleiches Schicksal ...
+
+** Objektgraph "in memory" ...
+
+#+BEGIN_SRC dot :file images/active-record-in-memory.png
+digraph ObjectLayout {
+  node [shape=plaintext];
+
+  ShoppingCart [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD BORDER="1">ShoppingCart</TD></TR>
+    <TR><TD>uuid</TD></TR>
+    <TR><TD PORT="products">products[]</TD></TR>
+    <TR><TD PORT="customer">customer</TD></TR>
+    <TR><TD>...</TD></TR>
+  </TABLE>>]
+
+
+  Customer [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD BORDER="1">Customer</TD></TR>
+    <TR><TD>uuid</TD></TR>
+    <TR><TD>name</TD></TR>
+    <TR><TD>address</TD></TR>
+    <TR><TD>dob</TD></TR>
+    <TR><TD>...</TD></TR>
+  </TABLE>>]
+
+  Product [label=<<TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD BORDER="1">Product</TD></TR>
+    <TR><TD>uuid</TD></TR>
+    <TR><TD>name</TD></TR>
+    <TR><TD>description</TD></TR>
+    <TR><TD>...</TD></TR>
+  </TABLE>>]
+
+  ShoppingCart:customer -> Customer;
+  ShoppingCart:products -> Product;
+}
+#+END_SRC
+
+** ... ORM Tool ...
+
+- Doctrine
+- Eloquent
+- Propel
+- php-activerecord
+
+** ... und Datenbank
+
+#+BEGIN_SRC dot :file images/active-record-database.png
+graph ObjectLayout {
+  node [shape=diamond]; contain; belongTo;
+  node [shape=box];
+
+  shopping_carts -- contain [label="n"]; contain -- products [label="m"];
+  shopping_carts -- belongTo [label="n"]; belongTo -- customers [label="1"];
+}
+#+END_SRC
+
+** ... funktioniert zumindest so mittel
+
+[[./images/uncle-bob.png]]
+
+** shopping_cart_items
+
+#+BEGIN_NOTES
+ - der ORM muss einen JOIN-Table erstellen, um die Collection aus dem Objekt-Modell abzubilden
+#+END_NOTES
+
+*** erstes Produkt in den Warenkorb ...
+
+| ID | shopping_cart_ID | product_ID |
+|----+------------------+------------|
+|  1 |                1 |         23 |
+
+*** ... zweites Produkt hinzufügen ...
+
+| ID | shopping_cart_ID | product_ID |
+|----+------------------+------------|
+|  1 |                1 |         23 |
+|  2 |                1 |         42 |
+
+*** ... ein Produkt wieder raus ...
+
+| ID | shopping_cart_ID | product_ID |
+|----+------------------+------------|
+|  1 |                1 |         23 |
+
+#+BEGIN_NOTES
+ - die Information, dass das Produkt jemals im Warenkorb hinterlegt war, geht hier verloren
+#+END_NOTES
+
+*** ... und ein anderes statt dessen rein ...
+
+| ID | shopping_cart_ID | product_ID |
+|----+------------------+------------|
+|  1 |                1 |         23 |
+|  3 |                1 |          5 |
+
+** Feature Request
+
+#+BEGIN_QUOTE
+Produkte die aus dem Warenkorb entfernt werden, werden sicherlich versehentlich entfernt und 
+unmittelbar im Anschluss vom Kunden bestimmt wieder hinzugefügt.
+
+Deswegen soll das Entfernen-Feature versteckt werden, um Fehlbedienung künftig zu vermeiden.
+#+END_QUOTE
+
+** Feature Request
+
+#+BEGIN_QUOTE
+Wenn Kunden lilafarbene Produkte zum Warenkorb hinzufügen, erschrecken sich diese bei Ansicht
+des Warenkorbs, da das Lila nicht zur Farbgebung der restlichen Seite passt.  Um zu
+verhindern, dass Kunden die Produkte dann entfernen, sollen jene Produkte künftig nicht mehr
+mit Bild im Warenkorb gelistet werden.
+#+END_QUOTE
+
+** Problem
+
+- fehlende Nachvollziehbarkeit, Änderungen sind nicht persistiert
+- keine nachträgliche Datenanalyse
+- Fehleranalyse schwierig (ggf. nur über logs)
+
+* Event Sourcing
+
+- es wird *nicht* der *aktuelle Zustand* von Obekten gespeichert
+- Veränderungen am Zustand werden als *Events* abgebildet
+- Events werden in einem *Event Store* aufgezeichnet (fancy für "Datenbank")
+
+** Event
+
+- sollten in Sprache des Business formuliert sein, nicht technisch
+- traten in der Vergangenheit auf, Name daher in Vergangenheitsform
+- sind unveränderlich (keine Setter, nur Getter)
+
+#+BEGIN_SRC php
+final class ProductWasAddedToShoppingCart implements DomainEvent
+{
+  private $shoppingCartId;
+  private $productId;
+
+  // public function __construct($shoppingCartId, $productId);
+  // Getter ...
+}
+#+END_SRC
+
+* Command-Query-Separation (CQS)
+
+ursprünglich ersonnen von *Bertrand Meyer*, dem Erfinder der Programmiersparche *Eiffel*
+
+- eine Methode ist entweder 
+  - *Abfrage* (query) oder 
+  - *Kommando* (command, modifier, mutator)
+- Abfrage muss Daten zurück liefern und Seiteneffektfrei sein
+- Kommando weist Nebeneffekt auf, gibt aber keine Daten zurück
+
+* Command-Query-Responsibility-Separation (CQRS)
+
+- ist eine Variante des CQS-Prinzips, angewendet auf Datenbank-Abfragen
+- ursprünglich definiert durch *Greg Young*
+
+** Write Side
+
+- verarbeitet einen Befehl, z.B. *ShoppingCart::addProduct*
+- prüft ob Befehl zulässig ist (Einhaltung aller Invarianten)
+- erstellt (0, 1, oder n) Event-Objekte, z.B. *ProductWasAddedToShoppingCart*
+- veröffentlicht Events
+- Persistierung des Events(!)
+
+** Read Side
+
+- verarbeitet Anfragen, a la *ShoppingCartController#listItemsAction*
+- hält hierzu Read-Modelle vor
+- die Read-Modelle entstehen durch Projektion der Events
+- subscribed auf Events zur fortwährenden Anpassung
+- ggf. Persistierung der Read-Modelle
+  - u.U. erforderlich in Abhängigkeit von Sprache
+  - bei PHP mit kurzen Request-Zyklen z.B. Redis
+  - bei Node.js, Java ... auch "in memory"
+
+* Beispiel Write Side
+
+** Grundgerüst ShoppingCart
+
+#+BEGIN_SRC php
+final class ShoppingCart implements RecordsEvents
+{
+  /** @var ShoppingCartId */
+  private $shoppingCartId;
+
+  private function __construct(ShoppingCartId $shoppingCartId)
+  {
+    $this->shoppingCartId = $shoppingCartId;
+  }
+
+  public static function create(ShoppingCartId $shoppingCartId)
+  {
+    $shoppingCart = new static($shoppingCartId);
+    $this->recordThat(new ShoppingCartWasCreated($shoppingCartId));
+    return $shoppingCart;
+  }
+}
+#+END_SRC
+
+** ShoppingCartId
+
+#+BEGIN_SRC php
+use Ramsey\Uuid\Uuid;
+
+final class ShoppingCartId implements IdentifiesAggregate
+{
+  private $shoppingCartId;
+
+  private function __construct(string $shoppingCartId)
+  {
+    $this->shoppingCartId = $shoppingCartId;
+  }
+
+  public function equals(IdentifiesAggregate $other)
+  {
+    return
+      $other instanceof ShoppingCartId
+      && $this->shoppingCartId === $other->shoppingCartId;
+  }
+
+  public static function generate()
+  {
+    return new static(Uuid::uuid4());
+  }
+
+  // public static function fromString(string $string) ...
+  // public function __toString() ...
+}
+#+END_SRC
+
+** ShoppingCartWasCreated
+
+#+BEGIN_SRC php
+final class ShoppingCartWasCreated implements DomainEvent
+{
+  /** @var ShoppingCartId */
+  private $shoppingCartId;
+  
+  public function __construct(ShoppingCartId $shoppingCartId)
+  {
+    $this->shoppingCartId = $shoppingCartId;
+  }
+
+  public function getAggregateId()
+  {
+    return $this->shoppingCartId;
+  }
+}
+#+END_SRC
+
+** ShoppingCart (pt. 2)
+
+#+BEGIN_SRC php
+final class ShoppingCart implements RecordsEvents
+{
+  /** @var DomainEvent[] */
+  private $recordedEvents;
+
+  private function recordThat(DomainEvent $event)
+  {
+    $this->recordedEvents[] = $event;
+  }
+
+  /** @return DomainEvent[] */
+  public function getRecordedEvents(): array
+  {
+    return $this->recordedEvents;
+  }
+}
+#+END_SRC
+
+** ProductWasAddedToShoppingCart (Event)
+
+#+BEGIN_SRC php
+final class ProductWasAddedToShoppingCart implements DomainEvent
+{
+  private $shoppingCartId;
+  private $productId;
+
+  public function __construct(ShoppingCartId $shoppingCartId, ProductId $productId)
+  {
+    $this->shoppingCartId = $shoppingCartId;
+    $this->productId = $productId;
+  }
+
+  public function getAggregateId()
+  {
+    return $this->shoppingCartId;
+  }
+
+  public function getProductId()
+  {
+    return $this->productId;
+  }
+}
+#+END_SRC
+
+** Produkt hinzufügen
+
+#+BEGIN_SRC php
+final class ShoppingCart implements RecordsEvents
+{
+  public function addProduct(ProductId $productId)
+  {
+    $this->recordThat(
+      new ProductWasAddedToShoppingCart($this->shoppingCartId, $productId)
+    );
+  }
+}
+#+END_SRC
+
+** Feature Request
+
+Wir haben nur noch XS-Pakete in der Logistik, Warenkörbe mit mehr als drei
+Produkten können nicht mehr abgewickelt werden.
+
+** Write Side stellt Invarianten sicher
+
+#+BEGIN_SRC php
+final class ShoppingCart implements RecordsEvents
+{
+  private $productCount = 0;
+
+  public function addProduct(ProductId $productId)
+  {
+    if ($this->productCount > 3) {
+      throw new ShoppingCartLimitReachedException();
+    }
+
+    $this->productCount ++;
+    $this->recordThat(
+      new ProductWasAddedToShoppingCart($this->shoppingCartId, $productId)
+    );
+  }
+
+  // removeProduct: $this->productCount --
+}
+#+END_SRC
+
+** Was noch fehlt ...
+
+- EventStore
+- ShoppingCartRepository
+- ShoppingCart Objekt aus persistierten Events wiederherstellen
+
+* Beispiel Read Side
+
+- Architektur muss Mechanismus bereitstellen, wie Events von der Write Side zur Read Side gelangen
+- typischerweise einen *Event Bus*
+- der Event Store published persistierte Events dann auf dem Bus
+- Read Projektoren können auf jene Events subscriben und diese verarbeiten
+
+** ShoppingCartListingProjector
+
+#+BEGIN_SRC php
+final class ShoppingCartListingProjector
+{
+  public function projectProductWasAddedToShoppingCart(
+    ProductWasAddedToShoppingCart $event
+  )
+  {
+    // $this->productRepository->find($event->getProductId())
+    // $product->getName() ...
+    $this->redis->rpush($event->getAggregateId(), $event->getProductId());
+  }
+}
+#+END_SRC
+
+** ShoppingCartController
+
+#+BEGIN_SRC php
+final class ShoppingCartController
+{
+  public function listItemsAction()
+  {
+    $shoppingCartId = $this->get('session')->get('shopping-cart-id');
+    $items = $this->get('redis')->lrange($shoppingCartId, 0, -1);
+
+    return $this->render('shopping-cart-list.html.twig', [ 'items' => $items ]);
+  }
+}
+#+END_SRC
+
+** Feature Request
+
+#+BEGIN_QUOTE
+Wir brauchen unbedingt ein Dashboard das den aktuell größten Warenkorb anzeigt.
+#+END_QUOTE
+
+#+ATTR_REVEAL: :frag appear
+  - Lösung: weiterer Projektor
+  - unabhängig von (allen anderen) Projektoren
+
+* Recap
+
+** Vorteile Event Sourcing
+
+- vollständiges Log über *jeden* Statuswechsel
+- unschlagbare Nachvollziehbarkeit (Recherche, Debugging, ...)
+- Undo :)
+- kein Objekt <-> Table Mapping mehr
+- keine DB-Migrationen mehr
+  - Events sind unveränderlich
+  - Read Modelle können neu aufgebaut werden
+- Komplexität verteilt sich auf mehr Klassen
+
+** Nachteile
+
+- Einarbeitung erforderlich
+- Framework/Community Unterstützung geringer
+- Mehraufwand durch CQRS und Projektion pro Abfragemöglichkeit
+
+** Frameworks & Co.
+
+- Broadway
+- Proophessor
+
+- buttercup-php/protects (Write Side)
+- Tactician (Command Bus)
+- SimpleBus (Command & Message Bus)
+
+** Soll ich das jetzt machen?
+
+Kommt darauf an, könnte passen, wenn ...
+
+- viel Verhalten, das nicht einfach "CRUD" ist
+- Nachvollziehbarkeit wichtig ist
+- Business Vorteil aus besserer Änderbarkeit zieht
+- Versionierung von Vorteil ist (CMS, Wiki)
+
+* Fragen?
+
+* Challenge
+
+#+ATTR_REVEAL: :frag appear
+- Event Sourced Warenkorb erstellen
+- kein User Interface, einfach nur Skript, das Klassen ansteuert
+  - paar Produkte rein
+  - paar wieder raus
+- Event Store nicht, bzw. nur "in memory" bauen, keine DB
+- Read Projektor 1: Item Liste
+- Read Projektor 2: Maximale Warenkorbgröße

@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Event Sourcing 101</title>
+<meta name="author" content="(Stefan Siegl)"/>
+<style type="text/css">
+.underline { text-decoration: underline; }
+</style>
+<link rel="stylesheet" href="./reveal.js/css/reveal.css"/>
+
+<link rel="stylesheet" href="./reveal.js/css/theme/white.css" id="theme"/>
+
+<link rel="stylesheet" href="custom.css"/>
+
+<!-- If the query includes 'print-pdf', include the PDF print sheet -->
+<script>
+    if( window.location.search.match( /print-pdf/gi ) ) {
+        var link = document.createElement( 'link' );
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = './reveal.js/css/print/pdf.css';
+        document.getElementsByTagName( 'head' )[0].appendChild( link );
+    }
+</script>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+<section>
+<section id="slide-orgheadline1">
+<h2 id="orgheadline1"></h2>
+
+<div class="figure">
+<p><img src="./images/dev_night-logo.png" alt="dev_night-logo.png" />
+</p>
+</div>
+
+</section>
+</section>
+
+<section id="sec-title-slide"><h1>Event Sourcing 101</h1><h2>Stefan Siegl</h2><p><a href="mailto:stefan.siegl@tradebyte.com">stefan.siegl@tradebyte.com</a></p>
+</section>
+
+<section>
+<section id="slide-orgheadline2">
+<h2 id="orgheadline2">Disclaimer</h2>
+<ul>
+<li>CQS, CQRS &amp; Event Sourcing sind kein "Silver Bullet"</li>
+<li>die gezeigten Entwurfsmuster können die Architektur in Teilen verbessern</li>
+<li>alles mit Event Sourcing bauen ist definitiv ein Anti Pattern</li>
+<li>Design-Entscheidung für einzelne bounded contexts treffen</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline3">
+<h2 id="orgheadline3">Business Domäne</h2>
+<ul>
+<li>einfaches Beispiel das jeder kennt: Warenkorb</li>
+<li>Warenkorb wird angelegt (evtl. kennen wir den Kunden auch schon)</li>
+<li>Kunde fügt Produkte dem Warenkorb hinzu</li>
+<li>Kunde entfernt diese wieder</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline16">
+<h2 id="orgheadline16">Active Record</h2>
+<p>
+"Data Mapper", gleiches Schicksal &#x2026;
+</p>
+
+</section>
+<section id="slide-orgheadline4">
+<h3 id="orgheadline4">Objektgraph "in memory" &#x2026;</h3>
+
+<div class="figure">
+<p><img src="images/active-record-in-memory.png" alt="active-record-in-memory.png" />
+</p>
+</div>
+
+</section>
+<section id="slide-orgheadline5">
+<h3 id="orgheadline5">&#x2026; ORM Tool &#x2026;</h3>
+<ul>
+<li>Doctrine</li>
+<li>Eloquent</li>
+<li>Propel</li>
+<li>php-activerecord</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline6">
+<h3 id="orgheadline6">&#x2026; und Datenbank</h3>
+
+<div class="figure">
+<p><img src="images/active-record-database.png" alt="active-record-database.png" />
+</p>
+</div>
+
+</section>
+<section id="slide-orgheadline7">
+<h3 id="orgheadline7">&#x2026; funktioniert zumindest so mittel</h3>
+
+<div class="figure">
+<p><img src="./images/uncle-bob.png" alt="uncle-bob.png" />
+</p>
+</div>
+
+</section>
+<section id="slide-orgheadline12">
+<h3 id="orgheadline12">shopping_cart_items</h3>
+<aside class="notes">
+<ul>
+<li>der ORM muss einen JOIN-Table erstellen, um die Collection aus dem Objekt-Modell abzubilden</li>
+
+</ul>
+
+</aside>
+
+</section>
+<section id="slide-orgheadline8">
+<h4 id="orgheadline8">erstes Produkt in den Warenkorb &#x2026;</h4>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-right" />
+
+<col  class="org-right" />
+
+<col  class="org-right" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-right">ID</th>
+<th scope="col" class="org-right">shopping_cart_ID</th>
+<th scope="col" class="org-right">product_ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-right">1</td>
+<td class="org-right">1</td>
+<td class="org-right">23</td>
+</tr>
+</tbody>
+</table>
+
+</section>
+<section id="slide-orgheadline9">
+<h4 id="orgheadline9">&#x2026; zweites Produkt hinzufügen &#x2026;</h4>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-right" />
+
+<col  class="org-right" />
+
+<col  class="org-right" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-right">ID</th>
+<th scope="col" class="org-right">shopping_cart_ID</th>
+<th scope="col" class="org-right">product_ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-right">1</td>
+<td class="org-right">1</td>
+<td class="org-right">23</td>
+</tr>
+
+<tr>
+<td class="org-right">2</td>
+<td class="org-right">1</td>
+<td class="org-right">42</td>
+</tr>
+</tbody>
+</table>
+
+</section>
+<section id="slide-orgheadline10">
+<h4 id="orgheadline10">&#x2026; ein Produkt wieder raus &#x2026;</h4>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-right" />
+
+<col  class="org-right" />
+
+<col  class="org-right" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-right">ID</th>
+<th scope="col" class="org-right">shopping_cart_ID</th>
+<th scope="col" class="org-right">product_ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-right">1</td>
+<td class="org-right">1</td>
+<td class="org-right">23</td>
+</tr>
+</tbody>
+</table>
+
+<aside class="notes">
+<ul>
+<li>die Information, dass das Produkt jemals im Warenkorb hinterlegt war, geht hier verloren</li>
+
+</ul>
+
+</aside>
+
+</section>
+<section id="slide-orgheadline11">
+<h4 id="orgheadline11">&#x2026; und ein anderes statt dessen rein &#x2026;</h4>
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="org-right" />
+
+<col  class="org-right" />
+
+<col  class="org-right" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="org-right">ID</th>
+<th scope="col" class="org-right">shopping_cart_ID</th>
+<th scope="col" class="org-right">product_ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="org-right">1</td>
+<td class="org-right">1</td>
+<td class="org-right">23</td>
+</tr>
+
+<tr>
+<td class="org-right">3</td>
+<td class="org-right">1</td>
+<td class="org-right">5</td>
+</tr>
+</tbody>
+</table>
+
+</section>
+<section id="slide-orgheadline13">
+<h3 id="orgheadline13">Feature Request</h3>
+<blockquote nil>
+<p>
+Produkte die aus dem Warenkorb entfernt werden, werden sicherlich versehentlich entfernt und 
+unmittelbar im Anschluss vom Kunden bestimmt wieder hinzugefügt.
+</p>
+
+<p>
+Deswegen soll das Entfernen-Feature versteckt werden, um Fehlbedienung künftig zu vermeiden.
+</p>
+</blockquote>
+
+</section>
+<section id="slide-orgheadline14">
+<h3 id="orgheadline14">Feature Request</h3>
+<blockquote nil>
+<p>
+Wenn Kunden lilafarbene Produkte zum Warenkorb hinzufügen, erschrecken sich diese bei Ansicht
+des Warenkorbs, da das Lila nicht zur Farbgebung der restlichen Seite passt.  Um zu
+verhindern, dass Kunden die Produkte dann entfernen, sollen jene Produkte künftig nicht mehr
+mit Bild im Warenkorb gelistet werden.
+</p>
+</blockquote>
+
+</section>
+<section id="slide-orgheadline15">
+<h3 id="orgheadline15">Problem</h3>
+<ul>
+<li>fehlende Nachvollziehbarkeit, Änderungen sind nicht persistiert</li>
+<li>keine nachträgliche Datenanalyse</li>
+<li>Fehleranalyse schwierig (ggf. nur über logs)</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline18">
+<h2 id="orgheadline18">Event Sourcing</h2>
+<ul>
+<li>es wird <b>nicht</b> der <b>aktuelle Zustand</b> von Obekten gespeichert</li>
+<li>Veränderungen am Zustand werden als <b>Events</b> abgebildet</li>
+<li>Events werden in einem <b>Event Store</b> aufgezeichnet (fancy für "Datenbank")</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline17">
+<h3 id="orgheadline17">Event</h3>
+<ul>
+<li>sollten in Sprache des Business formuliert sein, nicht technisch</li>
+<li>traten in der Vergangenheit auf, Name daher in Vergangenheitsform</li>
+<li>sind unveränderlich (keine Setter, nur Getter)</li>
+
+</ul>
+
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ProductWasAddedToShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">DomainEvent</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span>;
+
+  <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">public function __construct($shoppingCartId, $productId);</span>
+  <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">Getter ...</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline19">
+<h2 id="orgheadline19">Command-Query-Separation (CQS)</h2>
+<p>
+ursprünglich ersonnen von <b>Bertrand Meyer</b>, dem Erfinder der Programmiersparche <b>Eiffel</b>
+</p>
+
+<ul>
+<li>eine Methode ist entweder 
+<ul>
+<li><b>Abfrage</b> (query) oder</li>
+<li><b>Kommando</b> (command, modifier, mutator)</li>
+
+</ul></li>
+<li>Abfrage muss Daten zurück liefern und Seiteneffektfrei sein</li>
+<li>Kommando weist Nebeneffekt auf, gibt aber keine Daten zurück</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline22">
+<h2 id="orgheadline22">Command-Query-Responsibility-Separation (CQRS)</h2>
+<ul>
+<li>ist eine Variante des CQS-Prinzips, angewendet auf Datenbank-Abfragen</li>
+<li>ursprünglich definiert durch <b>Greg Young</b></li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline20">
+<h3 id="orgheadline20">Write Side</h3>
+<ul>
+<li>verarbeitet einen Befehl, z.B. <b>ShoppingCart::addProduct</b></li>
+<li>prüft ob Befehl zulässig ist (Einhaltung aller Invarianten)</li>
+<li>erstellt (0, 1, oder n) Event-Objekte, z.B. <b>ProductWasAddedToShoppingCart</b></li>
+<li>veröffentlicht Events</li>
+<li>Persistierung des Events(!)</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline21">
+<h3 id="orgheadline21">Read Side</h3>
+<ul>
+<li>verarbeitet Anfragen, a la <b>ShoppingCartController#listItemsAction</b></li>
+<li>hält hierzu Read-Modelle vor</li>
+<li>die Read-Modelle entstehen durch Projektion der Events</li>
+<li>subscribed auf Events zur fortwährenden Anpassung</li>
+<li>ggf. Persistierung der Read-Modelle
+<ul>
+<li>u.U. erforderlich in Abhängigkeit von Sprache</li>
+<li>bei PHP mit kurzen Request-Zyklen z.B. Redis</li>
+<li>bei Node.js, Java &#x2026; auch "in memory"</li>
+
+</ul></li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline32">
+<h2 id="orgheadline32">Beispiel Write Side</h2>
+<div class="outline-text-2" id="text-orgheadline32">
+</div></section>
+<section id="slide-orgheadline23">
+<h3 id="orgheadline23">Grundgerüst ShoppingCart</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">RecordsEvents</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #2aa1ae; ">/** </span><span style="color: #a45bad;">@var</span><span style="color: #2aa1ae; "> ShoppingCartId */</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">__construct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">static</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">create</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCart</span> = <span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #4f97d7; font-weight: bold;">static</span><span style="color: #2d9574;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #2d9574;">)</span>;
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">recordThat</span><span style="color: #2d9574;">(</span><span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartWasCreated</span><span style="color: #67b11d;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #67b11d;">)</span><span style="color: #2d9574;">)</span>;
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCart</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline24">
+<h3 id="orgheadline24">ShoppingCartId</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">use</span> <span style="color: #ce537a; font-weight: bold;">Ramsey\Uuid\Uuid</span>;
+
+<span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">IdentifiesAggregate</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">__construct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">string</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">equals</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">IdentifiesAggregate</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">other</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span>
+      <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">other</span> <span style="color: #4f97d7; font-weight: bold;">instanceof</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span>
+      &amp;&amp; <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span> === <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">other</span>-&gt;<span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">static</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">generate</span><span style="color: #bc6ec5;">()</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #4f97d7; font-weight: bold;">static</span><span style="color: #2d9574;">(</span><span style="color: #a45bad;">Uuid</span>::uuid4<span style="color: #67b11d;">()</span><span style="color: #2d9574;">)</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">public static function fromString(string $string) ...</span>
+  <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">public function __toString() ...</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline25">
+<h3 id="orgheadline25">ShoppingCartWasCreated</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartWasCreated</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">DomainEvent</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #2aa1ae; ">/** </span><span style="color: #a45bad;">@var</span><span style="color: #2aa1ae; "> ShoppingCartId */</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">__construct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">getAggregateId</span><span style="color: #bc6ec5;">()</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline26">
+<h3 id="orgheadline26">ShoppingCart (pt. 2)</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">RecordsEvents</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #2aa1ae; ">/** </span><span style="color: #a45bad;">@var</span><span style="color: #2aa1ae; "> DomainEvent[] */</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">recordedEvents</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">recordThat</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">DomainEvent</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">event</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">recordedEvents</span><span style="color: #2d9574;">[]</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">event</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #2aa1ae; ">/** </span><span style="color: #a45bad;">@return</span><span style="color: #2aa1ae; "> DomainEvent[] */</span>
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">getRecordedEvents</span><span style="color: #bc6ec5;">()</span>: <span style="color: #4f97d7; font-weight: bold;">array</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">recordedEvents</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline27">
+<h3 id="orgheadline27">ProductWasAddedToShoppingCart (Event)</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ProductWasAddedToShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">DomainEvent</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">__construct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ShoppingCartId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>, <span style="color: #ce537a; font-weight: bold;">ProductId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>;
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">productId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">getAggregateId</span><span style="color: #bc6ec5;">()</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">getProductId</span><span style="color: #bc6ec5;">()</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">productId</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline28">
+<h3 id="orgheadline28">Produkt hinzufügen</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">RecordsEvents</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">addProduct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ProductId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">recordThat</span><span style="color: #2d9574;">(</span>
+      <span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #ce537a; font-weight: bold;">ProductWasAddedToShoppingCart</span><span style="color: #67b11d;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span>, <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span><span style="color: #67b11d;">)</span>
+    <span style="color: #2d9574;">)</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline29">
+<h3 id="orgheadline29">Feature Request</h3>
+<p>
+Wir haben nur noch XS-Pakete in der Logistik, Warenkörbe mit mehr als drei
+Produkten können nicht mehr abgewickelt werden.
+</p>
+
+</section>
+<section id="slide-orgheadline30">
+<h3 id="orgheadline30">Write Side stellt Invarianten sicher</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCart</span> <span style="color: #4f97d7; font-weight: bold;">implements</span> <span style="color: #ce537a; font-weight: bold;">RecordsEvents</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">private</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productCount</span> = <span style="color: #a45bad;">0</span>;
+
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">addProduct</span><span style="color: #bc6ec5;">(</span><span style="color: #ce537a; font-weight: bold;">ProductId</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span><span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #4f97d7; font-weight: bold;">if</span> <span style="color: #2d9574;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">productCount</span> &gt; <span style="color: #a45bad;">3</span><span style="color: #2d9574;">)</span> <span style="color: #2d9574;">{</span>
+      <span style="color: #4f97d7; font-weight: bold;">throw</span> <span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartLimitReachedException</span><span style="color: #67b11d;">()</span>;
+    <span style="color: #2d9574;">}</span>
+
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">productCount</span> ++;
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">recordThat</span><span style="color: #2d9574;">(</span>
+      <span style="color: #4f97d7; font-weight: bold;">new</span> <span style="color: #ce537a; font-weight: bold;">ProductWasAddedToShoppingCart</span><span style="color: #67b11d;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">shoppingCartId</span>, <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">productId</span><span style="color: #67b11d;">)</span>
+    <span style="color: #2d9574;">)</span>;
+  <span style="color: #bc6ec5;">}</span>
+
+  <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">removeProduct: $this-&gt;productCount --</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline31">
+<h3 id="orgheadline31">Was noch fehlt &#x2026;</h3>
+<ul>
+<li>EventStore</li>
+<li>ShoppingCartRepository</li>
+<li>ShoppingCart Objekt aus persistierten Events wiederherstellen</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline36">
+<h2 id="orgheadline36">Beispiel Read Side</h2>
+<ul>
+<li>Architektur muss Mechanismus bereitstellen, wie Events von der Write Side zur Read Side gelangen</li>
+<li>typischerweise einen <b>Event Bus</b></li>
+<li>der Event Store published persistierte Events dann auf dem Bus</li>
+<li>Read Projektoren können auf jene Events subscriben und diese verarbeiten</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline33">
+<h3 id="orgheadline33">ShoppingCartListingProjector</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartListingProjector</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">projectProductWasAddedToShoppingCart</span><span style="color: #bc6ec5;">(</span>
+    <span style="color: #ce537a; font-weight: bold;">ProductWasAddedToShoppingCart</span> <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">event</span>
+  <span style="color: #bc6ec5;">)</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">$this-&gt;productRepository-&gt;find($event-&gt;getProductId())</span>
+    <span style="color: #2aa1ae; ">// </span><span style="color: #2aa1ae; ">$product-&gt;getName() ...</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #7590db;">redis</span>-&gt;<span style="color: #b2b2b2; ">rpush</span><span style="color: #2d9574;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">event</span>-&gt;<span style="color: #b2b2b2; ">getAggregateId</span><span style="color: #67b11d;">()</span>, <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">event</span>-&gt;<span style="color: #b2b2b2; ">getProductId</span><span style="color: #67b11d;">()</span><span style="color: #2d9574;">)</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline34">
+<h3 id="orgheadline34">ShoppingCartController</h3>
+<div class="org-src-container">
+
+<pre  class="src src-php"><span style="color: #4f97d7; font-weight: bold;">final</span> <span style="color: #4f97d7; font-weight: bold;">class</span> <span style="color: #ce537a; font-weight: bold;">ShoppingCartController</span>
+<span style="color: #4f97d7;">{</span>
+  <span style="color: #4f97d7; font-weight: bold;">public</span> <span style="color: #4f97d7; font-weight: bold;">function</span> <span style="color: #bc6ec5; font-weight: bold;">listItemsAction</span><span style="color: #bc6ec5;">()</span>
+  <span style="color: #bc6ec5;">{</span>
+    <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">get</span><span style="color: #2d9574;">(</span><span style="color: #2d9574;">'session'</span><span style="color: #2d9574;">)</span>-&gt;<span style="color: #b2b2b2; ">get</span><span style="color: #2d9574;">(</span><span style="color: #2d9574;">'shopping-cart-id'</span><span style="color: #2d9574;">)</span>;
+    <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">items</span> = <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">get</span><span style="color: #2d9574;">(</span><span style="color: #2d9574;">'redis'</span><span style="color: #2d9574;">)</span>-&gt;<span style="color: #b2b2b2; ">lrange</span><span style="color: #2d9574;">(</span><span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">shoppingCartId</span>, <span style="color: #a45bad;">0</span>, -<span style="color: #a45bad;">1</span><span style="color: #2d9574;">)</span>;
+
+    <span style="color: #4f97d7; font-weight: bold;">return</span> <span style="color: #b2b2b2; ">$</span><span style="color: #a45bad;">this</span>-&gt;<span style="color: #b2b2b2; ">render</span><span style="color: #2d9574;">(</span><span style="color: #2d9574;">'shopping-cart-list.html.twig'</span>, <span style="color: #67b11d;">[</span> <span style="color: #2d9574;">'items'</span> =&gt; <span style="color: #b2b2b2; ">$</span><span style="color: #7590db;">items</span> <span style="color: #67b11d;">]</span><span style="color: #2d9574;">)</span>;
+  <span style="color: #bc6ec5;">}</span>
+<span style="color: #4f97d7;">}</span>
+</pre>
+</div>
+
+</section>
+<section id="slide-orgheadline35">
+<h3 id="orgheadline35">Feature Request</h3>
+<blockquote nil>
+<p>
+Wir brauchen unbedingt ein Dashboard das den aktuell größten Warenkorb anzeigt.
+</p>
+</blockquote>
+
+<ul class="fragment appear">
+<li>Lösung: weiterer Projektor</li>
+<li>unabhängig von (allen anderen) Projektoren</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline41">
+<h2 id="orgheadline41">Recap</h2>
+<div class="outline-text-2" id="text-orgheadline41">
+</div></section>
+<section id="slide-orgheadline37">
+<h3 id="orgheadline37">Vorteile Event Sourcing</h3>
+<ul>
+<li>vollständiges Log über <b>jeden</b> Statuswechsel</li>
+<li>unschlagbare Nachvollziehbarkeit (Recherche, Debugging, &#x2026;)</li>
+<li>Undo :)</li>
+<li>kein Objekt &lt;-&gt; Table Mapping mehr</li>
+<li>keine DB-Migrationen mehr
+<ul>
+<li>Events sind unveränderlich</li>
+<li>Read Modelle können neu aufgebaut werden</li>
+
+</ul></li>
+<li>Komplexität verteilt sich auf mehr Klassen</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline38">
+<h3 id="orgheadline38">Nachteile</h3>
+<ul>
+<li>Einarbeitung erforderlich</li>
+<li>Framework/Community Unterstützung geringer</li>
+<li>Mehraufwand durch CQRS und Projektion pro Abfragemöglichkeit</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline39">
+<h3 id="orgheadline39">Frameworks &amp; Co.</h3>
+<ul>
+<li>Broadway</li>
+<li>Proophessor</li>
+
+<li>buttercup-php/protects (Write Side)</li>
+<li>Tactician (Command Bus)</li>
+<li>SimpleBus (Command &amp; Message Bus)</li>
+
+</ul>
+
+</section>
+<section id="slide-orgheadline40">
+<h3 id="orgheadline40">Soll ich das jetzt machen?</h3>
+<p>
+Kommt darauf an, könnte passen, wenn &#x2026;
+</p>
+
+<ul>
+<li>viel Verhalten, das nicht einfach "CRUD" ist</li>
+<li>Nachvollziehbarkeit wichtig ist</li>
+<li>Business Vorteil aus besserer Änderbarkeit zieht</li>
+<li>Versionierung von Vorteil ist (CMS, Wiki)</li>
+
+</ul>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline42">
+<h2 id="orgheadline42">Fragen?</h2>
+
+</section>
+</section>
+<section>
+<section id="slide-orgheadline43">
+<h2 id="orgheadline43">Challenge</h2>
+<ul class="fragment appear">
+<li>Event Sourced Warenkorb erstellen</li>
+<li>kein User Interface, einfach nur Skript, das Klassen ansteuert
+<ul>
+<li>paar Produkte rein</li>
+<li>paar wieder raus</li>
+
+</ul></li>
+<li>Event Store nicht, bzw. nur "in memory" bauen, keine DB</li>
+<li>Read Projektor 1: Item Liste</li>
+<li>Read Projektor 2: Maximale Warenkorbgröße</li>
+
+</ul>
+</section>
+</section>
+</div>
+</div>
+<script src="./reveal.js/lib/js/head.min.js"></script>
+<script src="./reveal.js/js/reveal.js"></script>
+
+<script>
+// Full list of configuration options available here:
+// https://github.com/hakimel/reveal.js#configuration
+Reveal.initialize({
+
+controls: true,
+progress: true,
+history: true,
+center: true,
+slideNumber: false,
+rollingLinks: true,
+keyboard: true,
+overview: true,
+width: 1200,
+height: 800,
+margin: 0.10,
+minScale: 0.50,
+maxScale: 2.50,
+
+theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
+transition: Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
+transitionSpeed: 'default',
+multiplex: {
+    secret: '', // null if client
+    id: '', // id, obtained from socket.io server
+    url: '' // Location of socket.io server
+},
+
+// Optional libraries used to extend on reveal.js
+dependencies: [
+ { src: './reveal.js/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: './reveal.js/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+ { src: './reveal.js/plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }]
+});
+</script>
+</body>
+</html>
